@@ -10,10 +10,11 @@ COLOR_RED='\033[0;31m'
 COLOR_WHITE='\033[0;33m'
 COLOR_YELLOW='\033[0;33m'
 
+COLOR_OUTPUT="false"
 DEBUG="false"
 EX_OPT_A="false"
 EX_OPT_B="false"
-COLOR_OUTPUT="false"
+SYSLOG="true"
 
 if [[ -t 0 ]]; then
     # STDIN is a TTY, show the user colors.
@@ -41,12 +42,12 @@ logprio () {
         esac
     fi
 
-    # Output the colorized message to STDOUT
-    logger -p "${PRIO}" -t "$(basename ${0})[$$]" -- "${*}"
+    if [[ "${SYSLOG}" == "true" ]]; then
+        logger -p "${PRIO}" -t "$(basename ${0})[$$]" -- "${*}"
+    fi
 
+    # If the message is an error or debugging, output to STDERR. Otherwise output to STDOUT.
     if [[ "${prio}" == "error" || "${prio}" == "debug" ]]; then
-        # Always output error messages to STDERR.
-        # Also output debug messages to STDERR.
         echo -e "${LOGCOLOR}${PRIO^}: ${*}${COLOR_NONE}" >&2
     else
         echo -e "${LOGCOLOR}${PRIO^}: ${*}${COLOR_NONE}"
@@ -109,36 +110,43 @@ while [[ -n $1 ]]; do
     param=$1
     case ${param} in
         -a|--a)
-            EX_OPT_A="true"
             shift
+            logdebug "EX_OPT_A=true"
+            EX_OPT_A="true"
             ;;
         -b|--b)
-            EX_OPT_B="true"
             shift
+            logdebug "EX_OPT_B=true"
+            EX_OPT_B="true"
             ;;
         -c|--c)
             shift
             value=$1
-
-            logdebug "${param}: ${value}"
             if ! validvalue "${value}"; then
                 logerror "Invalid value ${value} for parameter ${param}."
                 exit 1
             fi
+            logdebug "${param}: ${value}"
             shift
             ;;
         -d|--debug)
-            DEBUG="true"
             shift
+            DEBUG="true"
+            logdebug "Debugging output enabled."
             ;;
         -h|--help)
             shift
             usage
             exit 0
             ;;
-        -*)
-            logerror "Unknown option"
+        -s|--no-syslog)
             shift
+            logdebug "Disabling SYSLOG logging."
+            SYSLOG="false"
+            ;;
+        -*)
+            shift
+            logerror "Unknown option"
             usage
             exit 1
             ;;
