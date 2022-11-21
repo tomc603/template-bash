@@ -16,6 +16,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# TODO: Update script description in the header.
+# TODO: Update script description in the usage text.
+# TODO: Update parameter parsing.
+
 set -e
 set -o pipefail
 shopt -s nullglob
@@ -37,13 +41,15 @@ declare COLOR_YELLOW='\033[0;33m'
 # Runtime option variables
 declare COLOR_OUTPUT="false"
 declare DEBUG="false"
-declare INPUTFILE=""
+declare INPUT_FILE=""
 declare OPT_A="false"
 declare OPT_B="false"
 declare -a REMAINING
-declare SCRIPTNAME="$(basename $0)"
+declare SCRIPT_NAME
 declare SYSLOG="false"
 declare VERBOSE="false"
+
+SCRIPT_NAME="$(basename "$0")"
 
 # STDIN is a TTY, show the user colors.
 if [[ -t 0 ]]; then
@@ -62,32 +68,27 @@ fi
 # Outputs:
 #   Log message to stdout/stderr and/or syslog
 ########################################
-logprio () {
+log_prio () {
     local PRIO="$1"
     shift
 
     local LOGCOLOR=${COLOR_NONE}
     if [[ "${COLOR_OUTPUT}" == "true" ]]; then
         case "${PRIO}" in
-            debug)
-                LOGCOLOR=${COLOR_GREEN}
-                ;;
-            warning)
-                LOGCOLOR=${COLOR_YELLOW}
-                ;;
-            error)
-                LOGCOLOR=${COLOR_RED}
-                ;;
+            debug) LOGCOLOR=${COLOR_GREEN} ;;
+            error) LOGCOLOR=${COLOR_RED} ;;
+            info) LOGCOLOR=${COLOR_WHITE} ;;
+            warning) LOGCOLOR=${COLOR_YELLOW} ;;
         esac
     fi
 
     # Output messages to system logger
     if [[ "${SYSLOG}" == "true" ]]; then
-        logger -p "${PRIO}" -t "${SCRIPTNAME}[$$]" -- "${*}"
+        logger -p "${PRIO}" -t "${SCRIPT_NAME}[$$]" -- "${*}"
     fi
 
     # If the message is an error or debugging, output to STDERR. Otherwise output to STDOUT.
-    if [[ "${prio}" == "error" || "${prio}" == "debug" ]]; then
+    if [[ "${PRIO}" == "error" || "${PRIO}" == "debug" ]]; then
         echo -e "${LOGCOLOR}${PRIO^}: ${*}${COLOR_NONE}" >&2
     else
         echo -e "${LOGCOLOR}${PRIO^}: ${*}${COLOR_NONE}"
@@ -101,9 +102,9 @@ logprio () {
 # Arguments:
 #   Log message string
 ########################################
-logdebug () {
+log_debug () {
     if [[ "${DEBUG}" == "true" ]]; then
-        logprio debug "${*}"
+        log_prio debug "${*}"
     fi
 }
 
@@ -112,8 +113,8 @@ logdebug () {
 # Arguments:
 #   Log message string
 ########################################
-loginfo () {
-    logprio info "${*}"
+log_info () {
+    log_prio info "${*}"
 }
 
 #######################################
@@ -121,8 +122,8 @@ loginfo () {
 # Arguments:
 #   Log message string
 ########################################
-logwarn () {
-    logprio warning "${*}"
+log_warn () {
+    log_prio warning "${*}"
 }
 
 #######################################
@@ -130,23 +131,23 @@ logwarn () {
 # Arguments:
 #   Log message string
 ########################################
-logerror () {
-    logprio error "${*}"
+log_error () {
+    log_prio error "${*}"
 }
 
 #######################################
 # Print a helpful usage information message
 # Globals:
-#   SCRIPTNAME
+#   SCRIPT_NAME
 # Outputs:
 #   Usage details to stdout
 ########################################
 usage() {
     cat <<EOF
 
-${SCRIPTNAME} -- Describe the function of this script
+${SCRIPT_NAME} -- Describe the function of this script
 
-Usage: ${SCRIPTNAME} [-a | -b] [-d] [-v] -i INPUTFILE SOMETHING [SOMETHING ...]
+Usage: ${SCRIPT_NAME} [-a | -b] [-d] [-v] -i INPUT_FILE SOMETHING [SOMETHING ...]
     -a               Exclusive option A
     -b               Exclusive option B
     -d               Output debugging messages.
@@ -162,7 +163,7 @@ EOF
 # The main function that performs the script action
 # Globals:
 #   DEBUG
-#   INPUTFILE
+#   INPUT_FILE
 #   OPT_A
 #   OPT_B
 #   SYSLOG
@@ -174,12 +175,12 @@ EOF
 #
 ########################################
 do_something() {
-    loginfo "Doing something."
+    log_info "Doing something."
 
     cat << EOF
 Option Report:
 DEBUG     = ${DEBUG}
-INPUTFILE = ${INPUTFILE}
+INPUT_FILE = ${INPUT_FILE}
 OPT_A     = ${OPT_A}
 OPT_B     = ${OPT_B}
 SYSLOG    = ${SYSLOG}
@@ -191,7 +192,7 @@ EOF
 }
 
 # Process command line options
-while getopts :abdhi:sv OPTION; do
+while getopts :abdhi:Sv OPTION; do
     case "${OPTION}" in
       a) OPT_A="true" ;;
       b) OPT_B="true" ;;
@@ -203,11 +204,11 @@ while getopts :abdhi:sv OPTION; do
         usage
         exit 0
         ;;
-      i) INPUTFILE="${OPTARG}" ;;
-      s) SYSLOG="true" ;;
+      i) INPUT_FILE="${OPTARG}" ;;
+      S) SYSLOG="true" ;;
       v) VERBOSE="true" ;;
       *)
-        logerror "Invalid option -${OPTARG}"
+        log_error "Invalid option -${OPTARG}"
         usage
         exit 1
         ;;
@@ -220,7 +221,7 @@ REMAINING=( "$@" )
 
 # Verify mutually exclusive options don't conflict
 if [[ "${OPT_A}" == "true" && "${OPT_B}" == "true" ]]; then
-    logerror "Option A and Option B are exclusive."
+    log_error "Option A and Option B are exclusive."
     usage
     exit 1
 fi
