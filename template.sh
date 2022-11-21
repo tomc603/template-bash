@@ -1,33 +1,72 @@
 #!/usr/bin/env bash
+#
+# Describe this script's purpose
 
+# Copyright 2022 Tom Cameron
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+set -e
 set -o pipefail
 shopt -s nullglob
 
+# Verify we're using BASH 4.0 or newer, otherwise bail out
+if [[ -z "${BASH_VERSINFO}" || -z "${BASH_VERSINFO[0]}" || ${BASH_VERSINFO[0]} -lt 4 ]]; then
+    echo -e "${COLOR_RED}Error: This script requires BASH >= 4.0.${COLOR_NONE}" >&2
+    echo -e "${COLOR_RED}Error: Bash 4.0 was released in 2009. Get with it. Seriously.${COLOR_NONE}" >&2
+    exit 254
+fi
+
 # Log message colors. Remember to use COLOR_NONE to reset output.
-COLOR_GREEN='\033[0;32m'
-COLOR_NONE='\033[0m'
-COLOR_RED='\033[0;31m'
-COLOR_WHITE='\033[0;33m'
-COLOR_YELLOW='\033[0;33m'
+declare COLOR_GREEN='\033[0;32m'
+declare COLOR_NONE='\033[0m'
+declare COLOR_RED='\033[0;31m'
+declare COLOR_WHITE='\033[0;33m'
+declare COLOR_YELLOW='\033[0;33m'
 
-COLOR_OUTPUT="false"
-DEBUG="false"
-EX_OPT_A="false"
-EX_OPT_B="false"
-SYSLOG="true"
+# Runtime option variables
+declare COLOR_OUTPUT="false"
+declare DEBUG="false"
+declare INPUTFILE=""
+declare OPT_A="false"
+declare OPT_B="false"
+declare -a REMAINING
+declare SCRIPTNAME="$(basename $0)"
+declare SYSLOG="false"
+declare VERBOSE="false"
 
+# STDIN is a TTY, show the user colors.
 if [[ -t 0 ]]; then
-    # STDIN is a TTY, show the user colors.
     COLOR_OUTPUT="true"
 fi
 
+#######################################
+# Output optionally colorized messages
+# Globals:
+#   COLOR_GREEN
+#   COLOR_YELLOW
+#   COLOR_RED
+#   COLOR_NONE
+# Arguments:
+#   Priority string
+# Outputs:
+#   Log message to stdout/stderr and/or syslog
+########################################
 logprio () {
-    # Output messages to STDOUT/STDERR and Syslog
-    # Colorize messages based on priority if running on a TTY
-    PRIO="$1"
+    local PRIO="$1"
     shift
 
-    LOGCOLOR=${COLOR_NONE}
+    local LOGCOLOR=${COLOR_NONE}
     if [[ "${COLOR_OUTPUT}" == "true" ]]; then
         case "${PRIO}" in
             debug)
@@ -42,8 +81,9 @@ logprio () {
         esac
     fi
 
+    # Output messages to system logger
     if [[ "${SYSLOG}" == "true" ]]; then
-        logger -p "${PRIO}" -t "$(basename ${0})[$$]" -- "${*}"
+        logger -p "${PRIO}" -t "${SCRIPTNAME}[$$]" -- "${*}"
     fi
 
     # If the message is an error or debugging, output to STDERR. Otherwise output to STDOUT.
@@ -54,109 +94,136 @@ logprio () {
     fi
 }
 
+#######################################
+# Output debug message if debugging is enabled
+# Globals:
+#   DEBUG
+# Arguments:
+#   Log message string
+########################################
 logdebug () {
     if [[ "${DEBUG}" == "true" ]]; then
         logprio debug "${*}"
     fi
 }
 
+#######################################
+# Output information message
+# Arguments:
+#   Log message string
+########################################
 loginfo () {
     logprio info "${*}"
 }
 
+#######################################
+# Output warning message
+# Arguments:
+#   Log message string
+########################################
 logwarn () {
     logprio warning "${*}"
 }
 
+#######################################
+# Output error message
+# Arguments:
+#   Log message string
+########################################
 logerror () {
     logprio error "${*}"
 }
 
-validvalue() {
-    local value="$1"
-
-    if [[ "${value}" =~ ^-.* ]]; then
-        logdebug "Value ${value} starts with -"
-        return 1
-    fi
-}
-
+#######################################
+# Print a helpful usage information message
+# Globals:
+#   SCRIPTNAME
+# Outputs:
+#   Usage details to stdout
+########################################
 usage() {
-    scriptname="$(basename $0)"
-
     cat <<EOF
 
-${scriptname} -- Apply firmware updates
+${SCRIPTNAME} -- Describe the function of this script
 
-Usage: ${scriptname} [--a | -b]
-    -a | --a       Exclusive option A
-    -b | --b       Exclusive option B
+Usage: ${SCRIPTNAME} [-a | -b] [-d] [-v] -i INPUTFILE SOMETHING [SOMETHING ...]
+    -a               Exclusive option A
+    -b               Exclusive option B
+    -d               Output debugging messages.
+    -h               Print this usage message.
+    -i               File containing data to read. Required.
+    -v               Output verbose messages.
+    SOMETHING        One or more extra options, like a directory.
 
 EOF
 }
 
+#######################################
+# The main function that performs the script action
+# Globals:
+#   DEBUG
+#   INPUTFILE
+#   OPT_A
+#   OPT_B
+#   SYSLOG
+#   VERBOSE
+#   REMAINING
+# Outputs:
+#
+# Returns:
+#
+########################################
 do_something() {
     loginfo "Doing something."
-    return 0
+
+    cat << EOF
+Option Report:
+DEBUG     = ${DEBUG}
+INPUTFILE = ${INPUTFILE}
+OPT_A     = ${OPT_A}
+OPT_B     = ${OPT_B}
+SYSLOG    = ${SYSLOG}
+VERBOSE   = ${VERBOSE}
+
+REMAINING = ${REMAINING[@]}
+
+EOF
 }
 
-if [[ -z "${BASH_VERSINFO}" || -z "${BASH_VERSINFO[0]}" || ${BASH_VERSINFO[0]} -lt 4 ]]; then
-    echo -e "${COLOR_RED}Error: This script requires BASH >= 4.0.${COLOR_NONE}" >&2
-    echo -e "${COLOR_RED}Error: Bash 4.0 was released in 2009. Get with it. Seriously.${COLOR_NONE}" >&2
-    exit 1
-fi
-
-while [[ -n $1 ]]; do
-    param=$1
-    case ${param} in
-        -a|--a)
-            shift
-            logdebug "EX_OPT_A=true"
-            EX_OPT_A="true"
-            ;;
-        -b|--b)
-            shift
-            logdebug "EX_OPT_B=true"
-            EX_OPT_B="true"
-            ;;
-        -c|--c)
-            shift
-            value=$1
-            if ! validvalue "${value}"; then
-                logerror "Invalid value ${value} for parameter ${param}."
-                exit 1
-            fi
-            logdebug "${param}: ${value}"
-            shift
-            ;;
-        -d|--debug)
-            shift
-            DEBUG="true"
-            logdebug "Debugging output enabled."
-            ;;
-        -h|--help)
-            shift
-            usage
-            exit 0
-            ;;
-        -s|--no-syslog)
-            shift
-            logdebug "Disabling SYSLOG logging."
-            SYSLOG="false"
-            ;;
-        -*)
-            shift
-            logerror "Unknown option"
-            usage
-            exit 1
-            ;;
+# Process command line options
+while getopts :abdhi:sv OPTION; do
+    case "${OPTION}" in
+      a) OPT_A="true" ;;
+      b) OPT_B="true" ;;
+      d)
+        DEBUG="true"
+        VERBOSE="true"
+        ;;
+      h)
+        usage
+        exit 0
+        ;;
+      i) INPUTFILE="${OPTARG}" ;;
+      s) SYSLOG="true" ;;
+      v) VERBOSE="true" ;;
+      *)
+        logerror "Invalid option -${OPTARG}"
+        usage
+        exit 1
+        ;;
     esac
 done
 
-if [[ "${EX_OPT_A}" == "true" && "${EX_OPT_B}" == "true" ]]; then
+# Gather remaining options
+shift $((OPTIND - 1))
+REMAINING=( "$@" )
+
+# Verify mutually exclusive options don't conflict
+if [[ "${OPT_A}" == "true" && "${OPT_B}" == "true" ]]; then
     logerror "Option A and Option B are exclusive."
     usage
     exit 1
 fi
 
+# Call the main function of the script
 do_something
